@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 棒球轉播賽 - MLB Broadcast Pitcher Showdown</title>
-    <!-- Tailwind CSS CDN -->
+    <title>3D 棒球投手 Arcade 挑戰賽 - MLB TV Broadcast</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -13,53 +12,1028 @@
                 extend: {
                     colors: {
                         arcade: {
-                            bg: '#050811',
-                            panel: '#0e1626',
-                            card: '#162238',
-                            accent: '#00f2fe',
-                            gold: '#ffb703',
-                            pink: '#ff0055',
-                            green: '#10b981'
+                            bg: '#080d1a', panel: '#11192e', card: '#1b2640',
+                            accent: '#00f2fe', gold: '#ffb703', pink: '#ff0055', green: '#10b981'
                         }
                     }
                 }
             }
         }
     </script>
-    <!-- Three.js & OrbitControls -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
         body {
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: manipulation;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            user-select: none; -webkit-user-select: none; touch-action: manipulation;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; padding: 0; overflow: hidden; background-color: #080d1a;
         }
-        .broadcast-glass {
-            background: rgba(10, 16, 30, 0.88);
-            backdrop-filter: blur(14px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+        .tv-glass {
+            background: rgba(12, 20, 38, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
         }
-        .broadcast-banner-gradient {
-            background: linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(30,58,138,0.9) 100%);
-        }
-        .pulse-target {
-            animation: pulseGlow 1.2s infinite alternate;
+        .strike-zone-grid {
+            background-size: 33.33% 33.33%;
+            background-image:
+                linear-gradient(to right, rgba(0, 242, 254, 0.25) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 242, 254, 0.25) 1px, transparent 1px);
         }
         @keyframes pulseGlow {
-            0% { transform: scale(0.92); opacity: 0.85; }
-            100% { transform: scale(1.08); opacity: 1; box-shadow: 0 0 22px #00f2fe; }
+            0% { transform: scale(0.95); opacity: 0.8; }
+            100% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 18px #00f2fe; }
         }
-        @keyframes tvPopup {
-            0% { transform: translateY(-30px) scale(0.9); opacity: 0; }
-            100% { transform: translateY(0) scale(1); opacity: 1; }
+        .pulse-anim { animation: pulseGlow 1s infinite alternate cubic-bezier(0.4, 0, 0.6, 1); }
+        @keyframes tvPopIn {
+            0% { transform: translate(-50%, -60%) scale(0.8); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         }
-        .tv-popup-anim {
-            animation: tvPopup 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
+        .tv-popup-anim { animation: tvPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        #aim-grid { touch-action: none; }
     </style>
 </head>
-<body class="
+<body class="bg-arcade-bg text-white h-screen w-screen overflow-hidden flex flex-col justify-between">
+
+    <!-- 電視轉播計分板 -->
+    <header class="w-full z-20 px-4 pt-3 flex justify-between items-center pointer-events-none flex-wrap gap-2">
+        <div class="tv-glass px-4 py-2 rounded-xl flex items-center gap-4 shadow-2xl pointer-events-auto border-l-4 border-arcade-accent">
+            <div class="flex flex-col">
+                <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">MLB BROADCAST</span>
+                <span class="text-base font-black text-arcade-accent tracking-wide" id="stat-inning">1 局上</span>
+            </div>
+            <div class="h-8 w-px bg-slate-700"></div>
+            <div class="flex items-center gap-3 text-lg font-black tracking-wider">
+                <span class="text-slate-300">AWAY</span>
+                <span class="text-arcade-gold text-2xl" id="stat-score">0 - 0</span>
+                <span class="text-slate-300">HOME</span>
+            </div>
+        </div>
+
+        <div class="tv-glass px-5 py-2 rounded-xl flex items-center gap-5 shadow-2xl pointer-events-auto">
+            <div class="flex items-center gap-3 text-xs font-bold">
+                <div class="flex items-center gap-1">
+                    <span class="text-emerald-400 font-black mr-1">B</span>
+                    <div id="dot-b-1" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                    <div id="dot-b-2" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                    <div id="dot-b-3" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-amber-400 font-black mr-1">S</span>
+                    <div id="dot-s-1" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                    <div id="dot-s-2" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-rose-500 font-black mr-1">O</span>
+                    <div id="dot-o-1" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                    <div id="dot-o-2" class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 transition-colors"></div>
+                </div>
+            </div>
+
+            <div class="h-6 w-px bg-slate-700"></div>
+
+            <!-- 壘包 -->
+            <div class="relative w-11 h-8">
+                <div id="base-2" class="absolute w-3 h-3 rotate-45 bg-slate-800 border border-slate-500" style="left:15px; top:0px"></div>
+                <div id="base-3" class="absolute w-3 h-3 rotate-45 bg-slate-800 border border-slate-500" style="left:2px; top:13px"></div>
+                <div id="base-1" class="absolute w-3 h-3 rotate-45 bg-slate-800 border border-slate-500" style="left:28px; top:13px"></div>
+            </div>
+
+            <div class="h-6 w-px bg-slate-700"></div>
+
+            <div class="flex items-center gap-1">
+                <i class="fa-solid font-black text-rose-500 text-sm not-italic">K</i>
+                <span class="text-xl font-black text-white ml-1" id="stat-ks">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 3D 轉播畫面 -->
+    <main class="relative flex-1 w-full h-full my-2 min-h-0">
+        <div id="canvas-container" class="w-full h-full absolute inset-0"></div>
+
+        <!-- 視角切換 -->
+        <button id="btn-cam" class="absolute top-2 left-4 tv-glass px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 hover:brightness-125 z-10 flex items-center gap-2">
+            <i class="fa-solid fa-video text-arcade-accent"></i>
+            <span id="btn-cam-text">視角：中外野轉播</span>
+            <span class="text-slate-500">[C]</span>
+        </button>
+
+        <!-- 測速槍 -->
+        <div id="radar-banner" class="absolute top-2 right-4 tv-glass px-4 py-2.5 rounded-xl border-r-4 border-arcade-accent shadow-2xl flex items-center gap-4 transition-all duration-300 transform translate-x-64 opacity-0 pointer-events-none">
+            <div class="flex flex-col">
+                <span class="text-[10px] text-slate-400 font-bold tracking-widest uppercase">STATCAST RADAR</span>
+                <span id="radar-pitch-name" class="text-sm font-black text-arcade-accent">四縫線直球</span>
+            </div>
+            <div class="text-right">
+                <span id="radar-speed" class="text-2xl font-black text-arcade-gold">96</span>
+                <span class="text-xs font-bold text-slate-300 ml-0.5">MPH</span>
+            </div>
+        </div>
+
+        <!-- 結果彈窗 -->
+        <div id="tv-popup" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 tv-glass px-10 py-6 rounded-2xl shadow-2xl border-2 border-arcade-accent text-center pointer-events-none z-30">
+            <h2 id="tv-popup-title" class="text-4xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-arcade-accent via-white to-arcade-gold drop-shadow-lg">STRIKE OUT!</h2>
+            <p id="tv-popup-sub" class="text-sm font-bold text-slate-300 mt-1">揮棒落空，打者遭到三振！</p>
+        </div>
+    </main>
+
+    <!-- 操控面板 -->
+    <footer class="w-full z-20 px-4 pb-4">
+        <div class="max-w-6xl mx-auto tv-glass p-3 rounded-2xl shadow-2xl grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+
+            <div class="md:col-span-5 grid grid-cols-5 gap-1.5">
+                <button data-pitch="4SFB" class="pitch-btn p-2 rounded-xl bg-arcade-accent/20 border border-arcade-accent text-white flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95">
+                    <span class="text-xs font-black">直球</span><span class="text-[10px] text-slate-300 font-bold">1 · 4SFB</span>
+                </button>
+                <button data-pitch="SL" class="pitch-btn p-2 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95">
+                    <span class="text-xs font-black">滑球</span><span class="text-[10px] font-bold">2 · SL</span>
+                </button>
+                <button data-pitch="CB" class="pitch-btn p-2 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95">
+                    <span class="text-xs font-black">曲球</span><span class="text-[10px] font-bold">3 · CB</span>
+                </button>
+                <button data-pitch="CH" class="pitch-btn p-2 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95">
+                    <span class="text-xs font-black">變速</span><span class="text-[10px] font-bold">4 · CH</span>
+                </button>
+                <button data-pitch="FS" class="pitch-btn p-2 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95">
+                    <span class="text-xs font-black">指叉</span><span class="text-[10px] font-bold">5 · FS</span>
+                </button>
+            </div>
+
+            <div class="md:col-span-3 flex items-center justify-center gap-3">
+                <div class="text-right hidden lg:block">
+                    <div class="text-[10px] text-slate-400 font-bold">球路變化</div>
+                    <div class="text-xs font-black text-arcade-accent" id="stat-break-h">0 cm</div>
+                    <div class="text-xs font-black text-arcade-gold" id="stat-break-v">-10 cm</div>
+                </div>
+
+                <div id="aim-grid" class="relative w-28 h-32 border-2 border-arcade-accent/80 rounded-lg strike-zone-grid cursor-crosshair bg-slate-900/60 shadow-inner flex-shrink-0">
+                    <div id="aim-result" class="hidden absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full bg-white border-2 border-rose-500 pointer-events-none z-10"></div>
+                    <div id="aim-cursor" class="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full border-2 border-arcade-gold bg-arcade-gold/30 flex items-center justify-center pointer-events-none pulse-anim" style="top: 50%; left: 50%;">
+                        <div class="w-1 h-1 bg-white rounded-full"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="md:col-span-4 flex flex-col gap-2">
+                <div class="relative w-full h-5 bg-slate-900 rounded-full border border-slate-700 overflow-hidden shadow-inner">
+                    <div id="pitch-meter-target" class="absolute top-0 bottom-0 bg-emerald-500/80 border-x border-white" style="left: 75%; width: 12%;"></div>
+                    <div id="pitch-meter-indicator" class="absolute top-0 bottom-0 w-1.5 bg-arcade-gold shadow-[0_0_10px_#ffb703]" style="left: 0%;"></div>
+                </div>
+                <button id="btn-action" class="w-full py-2.5 px-4 rounded-xl font-black text-base text-slate-950 bg-gradient-to-r from-arcade-accent via-emerald-400 to-arcade-gold shadow-lg shadow-arcade-accent/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-baseball"></i>
+                    <span id="btn-action-text">開始投球 [空白鍵]</span>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+    // ============================================================
+    // 0. 工具
+    // ============================================================
+    const $ = id => document.getElementById(id);
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+
+    // ============================================================
+    // 1. 球種與場地參數
+    //    座標：本壘板中心 = 原點，+z 朝投手丘/轉播攝影機，+x 為畫面右側，y 向上 (公尺)
+    //    bx/by = 球路「後段變化量」(公尺)；arc = 出手後的拋物線隆起量 (重力+轉速)
+    // ============================================================
+    const PITCH_TYPES = {
+        '4SFB': { name: '四縫線直球', velo: 96, bx:  0.03, by: -0.05, arc: 0.16, color: 0x00f2fe },
+        'SL':   { name: '橫移滑球',   velo: 85, bx: -0.55, by: -0.25, arc: 0.30, color: 0xa855f7 },
+        'CB':   { name: '大縱角曲球', velo: 78, bx: -0.20, by: -0.95, arc: 0.70, color: 0xeab308 },
+        'CH':   { name: '圈指變速球', velo: 84, bx:  0.40, by: -0.45, arc: 0.38, color: 0x22c55e },
+        'FS':   { name: '快速指叉球', velo: 88, bx:  0.05, by: -0.75, arc: 0.48, color: 0x14b8a6 }
+    };
+    const ZONE = { halfW: 0.215, yMin: 0.5, yMax: 1.1 };
+    const BALL_R = 0.06;       // 視覺半徑（比真實略大，轉播距離下才看得見）
+    const SLOW = 2.0;          // 慢動作倍率 (飛行時間 = 真實時間 x SLOW)
+    const RUBBER_Z = 18.44;
+
+    const CAMS = [
+        { name: '中外野轉播', pos: new THREE.Vector3(0, 8, 125),    look: new THREE.Vector3(0, 1.4, 0),   fov: 2.9, trail: 0.035 },
+        { name: '捕手後方',   pos: new THREE.Vector3(0, 3.3, -6.5), look: new THREE.Vector3(0, 1.0, 14),  fov: 22,  trail: 0.030 },
+        { name: '三壘側面',   pos: new THREE.Vector3(18, 2.0, 9.4), look: new THREE.Vector3(0, 1.3, 9.4), fov: 34,  trail: 0.028 }
+    ];
+    let camIndex = 0;
+    let camFov = CAMS[0].fov;
+    const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+
+    const G = {
+        state: 'AIMING',      // AIMING | METER_POWER | WINDUP | IN_FLIGHT | RESULT
+        pitchKey: '4SFB',
+        aim: { x: 0, y: 0.8 },
+        meter: { p: 0, dir: 1, speed: 1.3 },
+        errRadius: 0, perfect: false,
+        pitcherT: -1,          // 投球動作計時 (秒)，-1 = 待機
+        pitch: null,           // {R,T,B,arc}
+        flightDur: 0.9, t: 0,
+        swingT: -1, swingStartT: 0.8,
+        plan: null,
+        resultT: 0, batted: null, atBatOver: false,
+        umpT: 0,
+        lastPitch: null, sameCount: 0,
+        balls: 0, strikes: 0, outs: 0, ks: 0, score: 0, inning: 1,
+        bases: [0, 0, 0], batterSide: 1
+    };
+
+    // ============================================================
+    // 2. 音效 (Web Audio)
+    // ============================================================
+    let audioCtx = null;
+    function playSound(type) {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            const sets = {
+                throw:  ['sine', 160, 450, 0.25, 0.3],
+                catch:  ['triangle', 180, 40, 0.09, 0.8],
+                hit:    ['square', 800, 120, 0.15, 0.7],
+                strike: ['sine', 440, 880, 0.3, 0.35],
+                ball:   ['sine', 300, 220, 0.2, 0.25],
+                swing:  ['sawtooth', 300, 120, 0.12, 0.12]
+            };
+            const s = sets[type]; if (!s) return;
+            osc.type = s[0];
+            osc.frequency.setValueAtTime(s[1], now);
+            osc.frequency.exponentialRampToValueAtTime(s[2], now + s[3]);
+            gain.gain.setValueAtTime(s[4], now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + s[3]);
+            osc.start(now); osc.stop(now + s[3]);
+        } catch (e) { console.warn('Audio error:', e); }
+    }
+
+    // ============================================================
+    // 3. Three.js 場景
+    // ============================================================
+    let scene, camera, renderer, clock;
+    let ballMesh, trailMesh = null, trailMat, trailPoints = [];
+    let reticle, landMarker, mitt;
+    let pitcher, catcher, umpire, batter, batterRig, batPivot, batTilt, batShirtMat;
+    const mittTarget = new THREE.Vector3(0, 0.8, -0.55);
+
+    function mat(color, rough = 0.85) {
+        return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0.05 });
+    }
+    function limbGeo(len, rt, rb) {
+        const g = new THREE.CylinderGeometry(rt, rb, len, 10);
+        g.translate(0, -len / 2, 0);
+        return g;
+    }
+
+    // 人形角色：預設面朝 -z，右手在 +x。所有肢體由關節 Group 旋轉驅動。
+    function buildHuman(o) {
+        const root = new THREE.Group();
+        const pelvis = new THREE.Group(); pelvis.position.y = o.pelvisY ?? 0.92; root.add(pelvis);
+        const torso = new THREE.Group(); pelvis.add(torso);
+        const shirt = mat(o.shirt), pants = mat(o.pants), skin = mat(o.skin ?? 0xe0b08c), cap = mat(o.cap ?? o.shirt, 0.5), shoes = mat(0x111111);
+        const add = (geo, m, parent, x, y, z) => {
+            const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; parent.add(me); return me;
+        };
+        add(new THREE.BoxGeometry(0.44, 0.6, 0.25), shirt, torso, 0, 0.3, 0);
+        add(new THREE.BoxGeometry(0.40, 0.2, 0.24), pants, pelvis, 0, 0, 0);
+        add(new THREE.SphereGeometry(0.115, 16, 12), skin, torso, 0, 0.72, 0);
+        add(new THREE.SphereGeometry(0.125, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), cap, torso, 0, 0.74, 0);
+        add(new THREE.BoxGeometry(0.17, 0.015, 0.13), cap, torso, 0, 0.745, -0.13);
+
+        function makeArm(x) {
+            const sh = new THREE.Group(); sh.position.set(x, 0.55, 0); torso.add(sh);
+            add(limbGeo(0.32, 0.055, 0.047), shirt, sh, 0, 0, 0);
+            const fore = new THREE.Group(); fore.position.y = -0.32; sh.add(fore);
+            add(limbGeo(0.30, 0.045, 0.04), skin, fore, 0, 0, 0);
+            const hand = new THREE.Object3D(); hand.position.y = -0.30; fore.add(hand);
+            add(new THREE.SphereGeometry(0.05, 10, 8), skin, hand, 0, 0, 0);
+            return { sh, fore, hand };
+        }
+        function makeLeg(x) {
+            const hip = new THREE.Group(); hip.position.set(x, -0.02, 0); pelvis.add(hip);
+            add(limbGeo(0.45, 0.075, 0.06), pants, hip, 0, 0, 0);
+            const knee = new THREE.Group(); knee.position.y = -0.45; hip.add(knee);
+            add(limbGeo(0.45, 0.06, 0.05), pants, knee, 0, 0, 0);
+            add(new THREE.BoxGeometry(0.1, 0.07, 0.26), shoes, knee, 0, -0.43, -0.06);
+            return { hip, knee };
+        }
+        const aR = makeArm(0.27), aL = makeArm(-0.27);
+        const lR = makeLeg(0.1), lL = makeLeg(-0.1);
+        root.traverse(c => { if (c.isMesh) c.castShadow = true; });
+        return { root, pelvis, torso,
+            armR: aR.sh, foreR: aR.fore, handR: aR.hand,
+            armL: aL.sh, foreL: aL.fore, handL: aL.hand,
+            legR: lR.hip, shinR: lR.knee, legL: lL.hip, shinL: lL.knee };
+    }
+
+    // 讓「向下垂的肢體」指向世界座標中的某點（簡易 IK，並縮放長度讓手剛好碰到目標）
+    const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _down = new THREE.Vector3(0, -1, 0);
+    function aimLimb(pivot, targetWorld, reach = 0.62) {
+        pivot.parent.updateWorldMatrix(true, false);
+        _v.copy(targetWorld);
+        pivot.parent.worldToLocal(_v);
+        _v.sub(pivot.position);
+        const dist = _v.length();
+        if (dist < 1e-4) return;
+        _v.divideScalar(dist);
+        pivot.quaternion.copy(_q.setFromUnitVectors(_down, _v));
+        pivot.scale.y = clamp(dist / reach, 0.5, 1.35);
+    }
+
+    function makeBokehTexture() {
+        const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#070c1a'; g.fillRect(0, 0, 1024, 256);
+        const cols = ['#ffd27a', '#7ad2ff', '#ff8ab0', '#a4ffcf', '#ffffff', '#c3a4ff'];
+        for (let i = 0; i < 520; i++) {
+            const x = Math.random() * 1024, y = Math.random() * 256, r = 3 + Math.random() * 14;
+            const grd = g.createRadialGradient(x, y, 0, x, y, r);
+            const col = cols[(Math.random() * cols.length) | 0];
+            grd.addColorStop(0, col + 'bb'); grd.addColorStop(1, col + '00');
+            g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+        }
+        const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.repeat.set(6, 1);
+        return t;
+    }
+    function makeWallTexture() {
+        const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#0c2742'; g.fillRect(0, 0, 1024, 256);
+        g.fillStyle = '#0a3a2a'; g.fillRect(0, 170, 1024, 86);          // 下方護墊
+        g.fillStyle = 'rgba(255,255,255,0.10)';
+        g.font = 'bold 54px system-ui, sans-serif';
+        for (let i = 0; i < 3; i++) g.fillText('ARCADE BASEBALL', 20 + i * 350, 110);
+        g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, 168, 1024, 3);
+        const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.repeat.set(3, 1);
+        return t;
+    }
+
+    function buildField() {
+        // 地面
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), mat(0x2f7d3a, 1));
+        ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+        // 內野紅土
+        const dirt = mat(0xb98a5a, 1);
+        const infield = new THREE.Mesh(new THREE.CircleGeometry(29, 64), dirt);
+        infield.rotation.x = -Math.PI / 2; infield.position.set(0, 0.01, RUBBER_Z); infield.receiveShadow = true; scene.add(infield);
+        // 內野草皮（菱形）
+        const turf = new THREE.Mesh(new THREE.PlaneGeometry(23, 23), mat(0x38904a, 1));
+        turf.rotation.x = -Math.PI / 2; turf.rotation.z = Math.PI / 4;
+        turf.position.set(0, 0.02, 19.4); turf.receiveShadow = true; scene.add(turf);
+        // 本壘附近紅土
+        const homeDirt = new THREE.Mesh(new THREE.CircleGeometry(4.2, 40), dirt);
+        homeDirt.rotation.x = -Math.PI / 2; homeDirt.position.set(0, 0.03, 0); homeDirt.receiveShadow = true; scene.add(homeDirt);
+
+        // 投手丘
+        const mound = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.9, 0.25, 40), dirt);
+        mound.position.set(0, 0.125, RUBBER_Z); mound.receiveShadow = true; mound.castShadow = true; scene.add(mound);
+        const rubber = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.15), mat(0xffffff, 0.6));
+        rubber.position.set(0, 0.27, RUBBER_Z); scene.add(rubber);
+
+        // 本壘板
+        const sh = new THREE.Shape();
+        sh.moveTo(-0.215, -0.216); sh.lineTo(0.215, -0.216); sh.lineTo(0.215, 0); sh.lineTo(0, 0.216); sh.lineTo(-0.215, 0); sh.closePath();
+        const plate = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        plate.rotation.x = -Math.PI / 2; plate.position.y = 0.05; scene.add(plate);
+
+        // 打擊區白線
+        const chalk = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        [-1, 1].forEach(s => {
+            const cx = s * 0.975;
+            [[0, -0.915, 1.22, 0.05], [0, 0.915, 1.22, 0.05]].forEach(([,z,w,d]) => {
+                const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.01, d), chalk); b.position.set(cx, 0.045, z); scene.add(b);
+            });
+            [-0.61, 0.61].forEach(dx => {
+                const b = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.01, 1.83), chalk); b.position.set(cx + dx, 0.045, 0); scene.add(b);
+            });
+        });
+
+        // 界外線
+        [-1, 1].forEach(s => {
+            const line = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.01, 90), chalk);
+            line.position.set(s * 31.8, 0.04, 31.8); line.rotation.y = s * Math.PI / 4; scene.add(line);
+        });
+        // 壘包
+        [[-19.4, 19.4], [0, 38.8], [19.4, 19.4]].forEach(([x, z]) => {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.38), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+            b.position.set(x, 0.07, z); b.rotation.y = Math.PI / 4; scene.add(b);
+        });
+
+        // 後擋牆（轉播視角的背景）
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(70, 5.5, 0.6),
+            new THREE.MeshStandardMaterial({ map: makeWallTexture(), roughness: 0.9 }));
+        wall.position.set(0, 2.75, -15); wall.receiveShadow = true; scene.add(wall);
+
+        // 看台散景
+        const stands = new THREE.Mesh(new THREE.CylinderGeometry(150, 150, 60, 48, 1, true),
+            new THREE.MeshBasicMaterial({ map: makeBokehTexture(), side: THREE.BackSide }));
+        stands.position.set(0, 20, 0); scene.add(stands);
+
+        // 好球帶 3D 疊圖（用細長方體當線，確保轉播距離下看得見）
+        const zg = new THREE.Group();
+        const edge = (w, h, x, y, color, op) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.01), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false }));
+            m.position.set(x, y, 0); zg.add(m);
+        };
+        const zw = ZONE.halfW * 2, zh = ZONE.yMax - ZONE.yMin, zc = (ZONE.yMax + ZONE.yMin) / 2, t = 0.014;
+        edge(zw + t, t, 0, ZONE.yMax, 0xffffff, 0.9); edge(zw + t, t, 0, ZONE.yMin, 0xffffff, 0.9);
+        edge(t, zh, -ZONE.halfW, zc, 0xffffff, 0.9); edge(t, zh, ZONE.halfW, zc, 0xffffff, 0.9);
+        edge(0.006, zh, -ZONE.halfW / 3, zc, 0x9ee9ff, 0.3); edge(0.006, zh, ZONE.halfW / 3, zc, 0x9ee9ff, 0.3);
+        edge(zw, 0.006, 0, ZONE.yMin + zh / 3, 0x9ee9ff, 0.3); edge(zw, 0.006, 0, ZONE.yMin + zh * 2 / 3, 0x9ee9ff, 0.3);
+        edge(zw, zh, 0, zc, 0x00f2fe, 0.07);
+        zg.position.z = 0.0; scene.add(zg);
+    }
+
+    function buildCharacters() {
+        // 投手 (右投)
+        pitcher = buildHuman({ shirt: 0xf4f4f4, pants: 0xdedede, cap: 0x0b2a6b });
+        pitcher.root.position.set(0, 0.25, RUBBER_Z);
+        const gloveP = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mat(0x4a2c14));
+        pitcher.handL.add(gloveP);
+        scene.add(pitcher.root);
+
+        // 捕手（蹲姿，面朝 +z）
+        catcher = buildHuman({ shirt: 0x14213d, pants: 0x14213d, cap: 0x14213d, pelvisY: 0.5 });
+        catcher.root.rotation.y = Math.PI; catcher.root.position.set(0, 0, -1.25);
+        catcher.legR.rotation.x = 1.5; catcher.shinR.rotation.x = -1.5;
+        catcher.legL.rotation.x = 1.5; catcher.shinL.rotation.x = -1.5;
+        catcher.legR.rotation.z = 0.35; catcher.legL.rotation.z = -0.35;
+        catcher.torso.rotation.x = -0.55;
+        catcher.armR.rotation.x = -0.3;
+        scene.add(catcher.root);
+        mitt = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), mat(0x5b3a1e, 0.6));
+        mitt.scale.set(1, 1, 0.55); mitt.castShadow = true; mitt.position.copy(mittTarget); scene.add(mitt);
+
+        // 主審
+        umpire = buildHuman({ shirt: 0x1a1a1a, pants: 0x3a3a3a, cap: 0x111111, pelvisY: 0.83 });
+        umpire.root.rotation.y = Math.PI; umpire.root.position.set(-0.3, 0, -2.0);
+        umpire.legR.rotation.x = 0.5; umpire.shinR.rotation.x = -0.9;
+        umpire.legL.rotation.x = 0.5; umpire.shinL.rotation.x = -0.9;
+        umpire.torso.rotation.x = -0.4;
+        scene.add(umpire.root);
+
+        // 打者（放在 rig 裡，左打時整組水平鏡像）
+        batterRig = new THREE.Group(); scene.add(batterRig);
+        batter = buildHuman({ shirt: 0xc8102e, pants: 0xb0b0b0, cap: 0x1d3557, pelvisY: 0.89 });
+        batShirtMat = null;
+        batter.root.traverse(c => { if (c.isMesh && c.material.color.getHex() === 0xc8102e) batShirtMat = c.material; });
+        batter.root.position.set(0.78, 0, -0.15);
+        batter.root.rotation.y = Math.PI / 2;           // 面朝 -x（右打者站畫面右側）
+        batter.legR.rotation.x = 0.3; batter.shinR.rotation.x = -0.5; batter.legR.rotation.z = 0.12;
+        batter.legL.rotation.x = 0.3; batter.shinL.rotation.x = -0.5; batter.legL.rotation.z = -0.12;
+        batterRig.add(batter.root);
+
+        batPivot = new THREE.Group(); batPivot.position.set(0.52, 1.25, -0.30); batterRig.add(batPivot);
+        batTilt = new THREE.Group(); batPivot.add(batTilt);
+        const bg = new THREE.CylinderGeometry(0.04, 0.016, 0.85, 12);
+        bg.translate(0, 0.425, 0); bg.rotateZ(Math.PI / 2);   // 握把在原點，球棒朝 -x
+        const bat = new THREE.Mesh(bg, mat(0xd9b27c, 0.5)); bat.castShadow = true; batTilt.add(bat);
+    }
+
+    function buildBallAndFx() {
+        ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 16, 12),
+            new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x555555, roughness: 0.4 }));
+        ballMesh.castShadow = true; ballMesh.visible = false; scene.add(ballMesh);
+
+        trailMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.9 });
+
+        reticle = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.075, 28),
+            new THREE.MeshBasicMaterial({ color: 0xffb703, side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthTest: false }));
+        reticle.renderOrder = 10; scene.add(reticle);
+
+        landMarker = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.1, 28),
+            new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide, depthTest: false }));
+        landMarker.renderOrder = 11; landMarker.visible = false; scene.add(landMarker);
+    }
+
+    function init3D() {
+        const container = $('canvas-container');
+        const w = container.clientWidth || window.innerWidth;
+        const h = container.clientHeight || window.innerHeight * 0.6;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x060b16);
+
+        camera = new THREE.PerspectiveCamera(CAMS[0].fov, w / h, 1, 600);
+        camPos.copy(CAMS[0].pos); camLook.copy(CAMS[0].look);
+        camera.position.copy(camPos); camera.lookAt(camLook);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(w, h);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x3a6b3a, 0.75));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+        sun.position.set(14, 30, 40); sun.target.position.set(0, 0, 8);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+        Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 30, bottom: -25, near: 1, far: 120 });
+        scene.add(sun); scene.add(sun.target);
+
+        buildField(); buildCharacters(); buildBallAndFx();
+
+        const onResize = () => {
+            const W = container.clientWidth, H = container.clientHeight;
+            if (!W || !H) return;
+            renderer.setSize(W, H); camera.aspect = W / H; camera.updateProjectionMatrix();
+        };
+        window.addEventListener('resize', onResize);
+        if (window.ResizeObserver) new ResizeObserver(onResize).observe(container);
+    }
+
+    // ============================================================
+    // 4. 投球動作關鍵影格 (u = 0~1，u=0.8 為放球瞬間)
+    // ============================================================
+    const WK = [0, 0.35, 0.65, 0.8, 1.0];
+    const WP = {
+        armR:   [0.1, -0.7, -1.9, -3.5, -5.6],
+        foreR:  [0, -0.3, -1.2, -0.1, -0.4],
+        armL:   [0.1, 0.9, 1.4, 0.3, -0.3],
+        foreL:  [0, 0.3, 0.4, 0.2, 0],
+        legL:   [0, 1.3, 0.7, 0.3, 0.15],
+        shinL:  [0, -1.5, -0.5, 0, 0],
+        legR:   [0, 0, -0.1, -0.4, -0.9],
+        shinR:  [0, 0, -0.1, -0.4, -1.2],
+        lean:   [0, 0.1, -0.1, -0.55, -0.75],
+        twist:  [0, -0.2, -0.7, 0.5, 0.6],
+        dz:     [0, 0, -0.4, -1.2, -1.4]
+    };
+    function sampleKeys(arr, u) {
+        for (let i = 0; i < WK.length - 1; i++) {
+            if (u <= WK[i + 1]) { const f = (u - WK[i]) / (WK[i + 1] - WK[i]); return arr[i] + (arr[i + 1] - arr[i]) * f; }
+        }
+        return arr[arr.length - 1];
+    }
+    function applyPitcherPose(u, time) {
+        const p = pitcher, S = k => sampleKeys(WP[k], u);
+        p.armR.rotation.x = S('armR'); p.foreR.rotation.x = S('foreR');
+        p.armL.rotation.x = S('armL'); p.foreL.rotation.x = S('foreL');
+        p.legL.rotation.x = S('legL'); p.shinL.rotation.x = S('shinL');
+        p.legR.rotation.x = S('legR'); p.shinR.rotation.x = S('shinR');
+        p.torso.rotation.x = S('lean'); p.torso.rotation.y = S('twist');
+        p.root.position.z = RUBBER_Z + S('dz');
+        p.pelvis.position.y = 0.92 + (u === 0 ? Math.sin(time * 2) * 0.008 : 0);
+        p.armR.scale.y = 1; p.armL.scale.y = 1;
+    }
+
+    // ============================================================
+    // 5. 球路物理、軌跡
+    // ============================================================
+    const _tmp = new THREE.Vector3();
+    function pitchPos(t, out) {
+        const P = G.pitch, tp = Math.pow(t, 2.4);       // 後段變化：越接近本壘越明顯
+        out.x = P.R.x + (P.T.x - P.B.x - P.R.x) * t + P.B.x * tp;
+        out.y = P.R.y + (P.T.y - P.B.y - P.R.y) * t + P.B.y * tp + P.arc * 4 * t * (1 - t);
+        out.z = P.R.z * (1 - t);
+        return out;
+    }
+    function clearTrail() {
+        if (trailMesh) { scene.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh = null; }
+        trailPoints = [];
+    }
+    function rebuildTrail() {
+        if (trailPoints.length < 3) return;
+        if (trailMesh) { scene.remove(trailMesh); trailMesh.geometry.dispose(); }
+        const curve = new THREE.CatmullRomCurve3(trailPoints);
+        const geo = new THREE.TubeGeometry(curve, Math.min(90, trailPoints.length * 2), CAMS[camIndex].trail, 6, false);
+        trailMesh = new THREE.Mesh(geo, trailMat);
+        scene.add(trailMesh);
+    }
+
+    // ============================================================
+    // 6. 打者判斷與結果預先擲骰
+    // ============================================================
+    function makePlan() {
+        const T = G.pitch.T;
+        const dx = Math.abs(T.x) / (ZONE.halfW + 0.037);
+        const dy = Math.abs(T.y - 0.8) / (0.3 + 0.037);
+        const dist = Math.max(dx, dy), inZone = dist <= 1;
+
+        let swingP = inZone ? 0.72 : (dist < 1.35 ? 0.42 : 0.14);
+        if (!inZone && G.pitchKey !== '4SFB') swingP += 0.10;
+        if (G.strikes === 2) swingP += 0.18;
+        if (G.balls === 3) swingP -= 0.25;
+        if (G.balls === 0 && G.strikes === 0 && inZone) swingP -= 0.12;
+        const swing = Math.random() < clamp(swingP, 0.03, 0.95);
+
+        let cp = inZone ? 0.78 : clamp(0.48 - (dist - 1) * 0.45, 0.08, 0.5);
+        cp += { '4SFB': 0, 'SL': -0.08, 'CB': -0.10, 'CH': -0.12, 'FS': -0.15 }[G.pitchKey];
+        if (dist < 0.4) cp += 0.08;
+        if (G.sameCount >= 2) cp += 0.08 * Math.min(3, G.sameCount - 1);   // 連投同球種，打者適應
+        cp = clamp(cp, 0.05, 0.92);
+
+        const plan = { dist, inZone, swing, contact: false, result: null };
+        if (!swing) plan.result = inZone ? 'STRIKE_LOOK' : 'BALL';
+        else if (Math.random() > cp) plan.result = 'STRIKE_SWING';
+        else {
+            plan.contact = true;
+            const hitP = inZone ? (dist < 0.4 ? 0.36 : 0.30) : 0.18, foulP = 0.36;
+            const r = Math.random();
+            if (r < foulP) plan.result = 'FOUL';
+            else if (r < foulP + hitP) {
+                const h = Math.random(), hrP = 0.10 + ((dist < 0.4 && (G.pitchKey === 'CB' || G.pitchKey === 'CH')) ? 0.05 : 0);
+                plan.result = h < 0.68 ? 'SINGLE' : (h < 1 - hrP ? 'DOUBLE' : 'HR');
+            } else plan.result = Math.random() < 0.5 ? 'OUT_FLY' : 'OUT_GROUND';
+        }
+        return plan;
+    }
+
+    // 擊出球落點設定
+    function makeBatted(res, C) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        let L = new THREE.Vector3(), apex = 0, dur = 1.4, ground = false;
+        switch (res) {
+            case 'FOUL':
+                if (Math.random() < 0.5) { L.set(side * rnd(2, 6), 0, -rnd(10, 13)); apex = rnd(6, 14); dur = 1.1; }
+                else { const z = rnd(-4, 18); L.set(side * (Math.abs(z) + 10 + rnd(0, 15)), 0, z); apex = rnd(8, 20); dur = 1.6; }
+                break;
+            case 'OUT_FLY': L.set(rnd(-14, 14), 0, rnd(32, 48)); apex = rnd(12, 22); dur = 2.0; break;
+            case 'OUT_GROUND': L.set(rnd(-12, 12), 0, rnd(10, 22)); apex = 0.5; dur = 1.1; ground = true; break;
+            case 'SINGLE': L.set(rnd(-22, 22), 0, rnd(36, 50)); apex = rnd(4, 9); dur = 1.6; break;
+            case 'DOUBLE': L.set((Math.random() < 0.5 ? -1 : 1) * rnd(22, 34), 0, rnd(45, 65)); apex = rnd(8, 14); dur = 1.9; break;
+            case 'HR': L.set(rnd(-24, 24), 0, 105); apex = rnd(28, 38); dur = 2.8; break;
+        }
+        return { C: C.clone(), L, apex, dur, ground, s: 0 };
+    }
+    function battedPos(b, out) {
+        const s = b.s;
+        out.x = lerp(b.C.x, b.L.x, s); out.z = lerp(b.C.z, b.L.z, s);
+        if (b.ground) out.y = lerp(b.C.y, 0.06, Math.min(1, s * 6)) + Math.abs(Math.sin(s * Math.PI * 3)) * 0.5 * (1 - s);
+        else out.y = lerp(b.C.y, 0.06, s) + b.apex * 4 * s * (1 - s);
+        return out;
+    }
+
+    // ============================================================
+    // 7. 比賽邏輯 (計數、壘包、HUD)
+    // ============================================================
+    function advanceRunners(n) {
+        let runs = 0; const b = G.bases;
+        if (n === 4) { runs = b.filter(Boolean).length + 1; G.bases = [0, 0, 0]; }
+        else {
+            for (let i = 2; i >= 0; i--) if (b[i]) { const ni = i + n; if (ni >= 3) runs++; else b[ni] = 1; b[i] = 0; }
+            b[n - 1] = 1;
+        }
+        return runs;
+    }
+    function walkRunner() {
+        let runs = 0; const b = G.bases;
+        if (b[0]) { if (b[1]) { if (b[2]) runs++; b[2] = 1; } b[1] = 1; }
+        b[0] = 1; return runs;
+    }
+    function updateHUD() {
+        $('stat-inning').textContent = `${G.inning} 局上 · ${G.batterSide > 0 ? '右打' : '左打'}`;
+        $('stat-score').textContent = `${G.score} - 0`;
+        $('stat-ks').textContent = G.ks;
+        const on = (id, cond, color) => { $(id).style.backgroundColor = cond ? color : ''; };
+        for (let i = 1; i <= 3; i++) on('dot-b-' + i, G.balls >= i, '#34d399');
+        for (let i = 1; i <= 2; i++) on('dot-s-' + i, G.strikes >= i, '#fbbf24');
+        for (let i = 1; i <= 2; i++) on('dot-o-' + i, G.outs >= i, '#f43f5e');
+        for (let i = 1; i <= 3; i++) on('base-' + i, G.bases[i - 1], '#ffb703');
+    }
+    function showPopup(title, sub) {
+        const el = $('tv-popup');
+        $('tv-popup-title').textContent = title; $('tv-popup-sub').textContent = sub;
+        el.classList.remove('hidden', 'tv-popup-anim'); void el.offsetWidth; el.classList.add('tv-popup-anim');
+    }
+    function hidePopup() { $('tv-popup').classList.add('hidden'); }
+
+    function newBatter() {
+        G.balls = 0; G.strikes = 0; G.atBatOver = false;
+        G.batterSide = Math.random() < 0.7 ? 1 : -1;
+        batterRig.scale.x = G.batterSide;
+        if (batShirtMat) batShirtMat.color.setHex([0xc8102e, 0x1d3557, 0xf77f00, 0x2a9d8f, 0x6a4c93][(Math.random() * 5) | 0]);
+        updateHUD();
+    }
+
+    function applyResult(res) {
+        let title = '', sub = '', runs = 0, over = false, sfx = 'strike';
+        const outCheck = () => {
+            if (G.outs >= 3) {
+                G.outs = 0; G.bases = [0, 0, 0]; G.inning++;
+                sub += ' · 三出局，攻守交換';
+            }
+        };
+        switch (res) {
+            case 'STRIKE_LOOK': case 'STRIKE_SWING': {
+                G.strikes++;
+                if (G.strikes >= 3) {
+                    G.ks++; G.outs++; over = true; title = 'STRIKE OUT!';
+                    sub = res === 'STRIKE_SWING' ? '揮棒落空，打者遭到三振！' : '打者站著不動，被三振！';
+                    outCheck();
+                } else {
+                    title = res === 'STRIKE_SWING' ? 'SWING & MISS!' : 'STRIKE!';
+                    sub = res === 'STRIKE_SWING' ? '揮棒落空' : '好球，打者沒有出棒';
+                }
+                break;
+            }
+            case 'BALL':
+                G.balls++; sfx = 'ball';
+                if (G.balls >= 4) { runs = walkRunner(); over = true; title = 'BASE ON BALLS'; sub = '四壞球保送上壘'; }
+                else { title = 'BALL'; sub = '壞球，打者沒有出棒'; }
+                break;
+            case 'FOUL':
+                if (G.strikes < 2) G.strikes++;
+                title = 'FOUL BALL'; sub = '界外球'; sfx = 'hit'; break;
+            case 'OUT_FLY': G.outs++; over = true; title = 'FLY OUT'; sub = '飛球接殺出局'; sfx = 'hit'; outCheck(); break;
+            case 'OUT_GROUND': G.outs++; over = true; title = 'GROUND OUT'; sub = '滾地球刺殺出局'; sfx = 'hit'; outCheck(); break;
+            case 'SINGLE': runs = advanceRunners(1); over = true; title = 'SINGLE'; sub = '一壘安打'; sfx = 'hit'; break;
+            case 'DOUBLE': runs = advanceRunners(2); over = true; title = 'DOUBLE'; sub = '二壘安打'; sfx = 'hit'; break;
+            case 'HR': runs = advanceRunners(4); over = true; title = 'HOME RUN!'; sub = '全壘打！球飛出球場'; sfx = 'hit'; break;
+        }
+        if (runs > 0) { G.score += runs; sub += ` · 失 ${runs} 分`; }
+        G.atBatOver = over;
+        playSound(sfx === 'hit' ? 'strike' : sfx);
+        showPopup(title, sub);
+        updateHUD();
+        if (res === 'STRIKE_LOOK' || res === 'STRIKE_SWING') G.umpT = 1.1;
+    }
+
+    // ============================================================
+    // 8. 流程：瞄準 → 力量條 → 投球動作 → 飛行 → 結果
+    // ============================================================
+    function setActionButton(text, disabled) {
+        $('btn-action-text').textContent = text;
+        const b = $('btn-action'); b.disabled = !!disabled; b.style.opacity = disabled ? 0.55 : 1;
+    }
+
+    function selectPitch(key) {
+        if (G.state !== 'AIMING' && G.state !== 'METER_POWER') return;
+        G.pitchKey = key;
+        document.querySelectorAll('.pitch-btn').forEach(btn => {
+            const on = btn.dataset.pitch === key;
+            btn.classList.toggle('bg-arcade-accent/20', on); btn.classList.toggle('border-arcade-accent', on); btn.classList.toggle('text-white', on);
+            btn.classList.toggle('bg-slate-800/80', !on); btn.classList.toggle('border-slate-700', !on); btn.classList.toggle('text-slate-400', !on);
+        });
+        const P = PITCH_TYPES[key];
+        $('stat-break-h').textContent = `${Math.abs(Math.round(P.bx * 100))} cm ${P.bx < -0.01 ? '← 左' : (P.bx > 0.01 ? '右 →' : '')}`;
+        $('stat-break-v').textContent = `${Math.round(P.by * 100)} cm ↓`;
+    }
+
+    function setCam(i) {
+        camIndex = (i + CAMS.length) % CAMS.length;
+        $('btn-cam-text').textContent = '視角：' + CAMS[camIndex].name;
+        if (trailMesh) rebuildTrail();
+    }
+
+    function updateAimCursor() {
+        const fx = G.aim.x / (ZONE.halfW * 2) + 0.5;
+        const fy = 1 - (G.aim.y - ZONE.yMin) / (ZONE.yMax - ZONE.yMin);
+        const c = $('aim-cursor'); c.style.left = (fx * 100) + '%'; c.style.top = (fy * 100) + '%';
+        reticle.position.set(G.aim.x, G.aim.y, 0.03);
+    }
+
+    function startMeter() {
+        G.state = 'METER_POWER'; G.meter.p = 0; G.meter.dir = 1;
+        $('aim-result').classList.add('hidden');
+        setActionButton('放球！[空白鍵]', false);
+    }
+
+    function releasePitch() {          // 玩家按下放球 → 判定力量條精準度，開始投球動作
+        const d = Math.abs(G.meter.p - 0.81);
+        G.perfect = d < 0.06;
+        const acc = clamp(1 - d / 0.5, 0, 1);
+        G.errRadius = G.perfect ? 0.03 : (1 - acc) * 0.6 + 0.03;
+        G.state = 'WINDUP'; G.pitcherT = 0;
+        setActionButton('投球動作中…', true);
+    }
+
+    function doRelease() {
+        const P = PITCH_TYPES[G.pitchKey];
+        pitcher.root.updateMatrixWorld(true);
+        const R = new THREE.Vector3(); pitcher.handR.getWorldPosition(R);
+
+        const ang = Math.random() * Math.PI * 2, er = G.errRadius * Math.sqrt(Math.random());
+        const T = new THREE.Vector3(G.aim.x + Math.cos(ang) * er, G.aim.y + Math.sin(ang) * er * 1.1, 0);
+
+        const speed = Math.round(P.velo + rnd(-1.5, 1.5) + (G.perfect ? 1 : 0));
+        G.pitch = { R, T, B: { x: P.bx, y: P.by }, arc: P.arc };
+        G.flightDur = (R.z / (speed * 0.447)) * SLOW;
+        G.t = 0; G.swingT = -1; G.swingStartT = 1 - 0.165 / G.flightDur;
+
+        if (G.lastPitch === G.pitchKey) G.sameCount++; else { G.sameCount = 1; G.lastPitch = G.pitchKey; }
+        G.plan = makePlan();
+
+        clearTrail();
+        trailMat.color.setHex(P.color); trailMat.opacity = 0.9;
+        trailPoints.push(R.clone());
+        ballMesh.position.copy(R); ballMesh.visible = true;
+        reticle.visible = false; landMarker.visible = false;
+
+        $('radar-pitch-name').textContent = P.name + (G.perfect ? ' · PERFECT' : '');
+        $('radar-speed').textContent = speed;
+        const rb = $('radar-banner');
+        rb.classList.remove('translate-x-64', 'opacity-0'); rb.classList.add('translate-x-0', 'opacity-100');
+        clearTimeout(doRelease._t);
+        doRelease._t = setTimeout(() => { rb.classList.add('translate-x-64', 'opacity-0'); rb.classList.remove('translate-x-0', 'opacity-100'); }, 3000);
+
+        playSound('throw');
+        G.state = 'IN_FLIGHT';
+    }
+
+    function onArrival() {
+        const T = G.pitch.T, plan = G.plan;
+        pitchPos(1, ballMesh.position);
+
+        // 落點標記 + 九宮格上的實際落點
+        landMarker.position.set(T.x, T.y, 0.04);
+        landMarker.material.color.setHex(plan.inZone ? 0x10b981 : 0xff0055);
+        landMarker.visible = true;
+        const fx = T.x / (ZONE.halfW * 2) + 0.5, fy = 1 - (T.y - ZONE.yMin) / (ZONE.yMax - ZONE.yMin);
+        const dot = $('aim-result'); dot.style.left = (fx * 100) + '%'; dot.style.top = (fy * 100) + '%';
+        dot.style.borderColor = plan.inZone ? '#10b981' : '#ff0055'; dot.classList.remove('hidden');
+
+        if (plan.contact) {
+            playSound('hit');
+            G.batted = makeBatted(plan.result, new THREE.Vector3(T.x, T.y, 0));
+            G.resultT = G.batted.dur + 0.9;
+            mittTarget.set(0, 0.7, -0.6);
+        } else {
+            playSound('catch');
+            mittTarget.set(T.x, T.y, -0.45);
+            ballMesh.position.set(T.x, T.y, -0.33);
+            G.resultT = 1.9;
+        }
+        applyResult(plan.result);
+        G.state = 'RESULT';
+    }
+
+    function endResult() {
+        hidePopup(); clearTrail();
+        ballMesh.visible = false; landMarker.visible = false; G.batted = null;
+        if (G.atBatOver) newBatter();
+        G.state = 'AIMING'; G.pitcherT = -1; G.swingT = -1; G.umpT = 0;
+        reticle.visible = true; updateAimCursor();
+        setActionButton('開始投球 [空白鍵]', false);
+    }
+
+    function handleAction() {
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        if (G.state === 'AIMING') startMeter();
+        else if (G.state === 'METER_POWER') releasePitch();
+    }
+
+    // ============================================================
+    // 9. 每幀更新
+    // ============================================================
+    function updateBatter(dt, time) {
+        let s = 0;
+        if (G.swingT >= 0) {
+            if (G.swingT === 0) playSound('swing');
+            G.swingT += dt; s = clamp(G.swingT / 0.30, 0, 1);
+        }
+        const idle = (G.swingT < 0) ? Math.sin(time * 6) * 0.04 : 0;
+        batter.torso.rotation.y = lerp(-0.6, 1.1, smooth(s));
+        batter.torso.rotation.x = -0.15;
+        const psi = lerp(-1.35, 1.5, smooth(s));
+        const tilt = s < 0.4 ? lerp(-1.05, -0.05, s / 0.4) : lerp(-0.05, -0.9, (s - 0.4) / 0.6);
+        batPivot.rotation.y = psi; batTilt.rotation.z = tilt + idle;
+
+        let contactY = 1.0;
+        if (G.pitch) contactY = 1.0 + (G.pitch.T.y - 0.8) * 0.5;
+        const hy = s < 0.55 ? lerp(1.25, contactY, smooth(s / 0.55)) : lerp(contactY, 1.38, smooth((s - 0.55) / 0.45));
+        batPivot.position.y = hy;
+
+        batterRig.updateMatrixWorld(true);
+        const hp = new THREE.Vector3(); batPivot.getWorldPosition(hp);
+        aimLimb(batter.armR, hp); aimLimb(batter.armL, hp);
+        batter.foreR.rotation.x = 0; batter.foreL.rotation.x = 0;
+    }
+
+    function updateCatcherUmp(dt) {
+        const k = 1 - Math.exp(-dt * (G.state === 'RESULT' ? 28 : 6));
+        if (G.state === 'AIMING' || G.state === 'METER_POWER' || G.state === 'WINDUP' || G.state === 'IN_FLIGHT') {
+            if (G.state !== 'IN_FLIGHT' || true) mittTarget.set(G.aim.x, G.aim.y, -0.55);
+        }
+        mitt.position.lerp(mittTarget, k);
+        mitt.rotation.y = (G.state === 'RESULT') ? 0 : 0;
+        catcher.root.updateMatrixWorld(true);
+        aimLimb(catcher.armL, mitt.position, 0.62);
+
+        // 主審喊好球
+        if (G.umpT > 0) {
+            G.umpT -= dt;
+            const up = smooth((1.1 - G.umpT) / 0.2);
+            umpire.armR.rotation.x = lerp(0.1, -2.7, up);
+            umpire.foreR.rotation.x = lerp(0, -0.5, up);
+        } else { umpire.armR.rotation.x = 0.1; umpire.foreR.rotation.x = 0; }
+    }
+
+    function updateCamera(dt) {
+        const preset = CAMS[camIndex];
+        let look = preset.look, fov = preset.fov;
+        if (G.batted) {          // 擊出後鏡頭追球（轉播切換成追球鏡頭）
+            _tmp.copy(ballMesh.position); _tmp.z = Math.min(_tmp.z, 60); _tmp.y = Math.max(_tmp.y, 0.5);
+            look = _tmp; if (camIndex === 0) fov = 10;
+        }
+        const k = 1 - Math.exp(-dt * (G.batted ? 3.5 : 3));
+        camPos.lerp(preset.pos, k); camLook.lerp(look, k); camFov = lerp(camFov, fov, k);
+        camera.fov = camFov; camera.updateProjectionMatrix();
+        camera.position.copy(camPos); camera.lookAt(camLook);
+    }
+
+    function update(dt, time) {
+        // 投手動作
+        if (G.pitcherT >= 0) {
+            G.pitcherT += dt;
+            applyPitcherPose(Math.min(G.pitcherT / 1.0, 1), time);
+        } else applyPitcherPose(0, time);
+
+        switch (G.state) {
+            case 'METER_POWER': {
+                const m = G.meter;
+                m.p += m.dir * m.speed * dt;
+                if (m.p >= 1) { m.p = 1; m.dir = -1; } else if (m.p <= 0) { m.p = 0; m.dir = 1; }
+                $('pitch-meter-indicator').style.left = (m.p * 100) + '%';
+                break;
+            }
+            case 'WINDUP':
+                if (G.pitcherT >= 0.8) doRelease();
+                break;
+            case 'IN_FLIGHT': {
+                G.t += dt / G.flightDur;
+                if (G.plan.swing && G.swingT < 0 && G.t >= G.swingStartT) G.swingT = 0;
+                const tt = Math.min(G.t, 1);
+                pitchPos(tt, ballMesh.position);
+                ballMesh.rotation.x += dt * 25;
+                const last = trailPoints[trailPoints.length - 1];
+                if (!last || last.distanceTo(ballMesh.position) > 1e-3) { trailPoints.push(ballMesh.position.clone()); rebuildTrail(); }
+                if (G.t >= 1) onArrival();
+                break;
+            }
+            case 'RESULT': {
+                G.resultT -= dt;
+                if (G.batted) {
+                    const b = G.batted;
+                    b.s = Math.min(1, b.s + dt / b.dur);
+                    battedPos(b, ballMesh.position);
+                    ballMesh.rotation.x += dt * 20;
+                }
+                if (G.resultT < 0.7) trailMat.opacity = clamp(G.resultT / 0.7, 0, 1) * 0.9;
+                if (G.resultT <= 0) endResult();
+                break;
+            }
+        }
+        updateBatter(dt, time);
+        updateCatcherUmp(dt);
+        updateCamera(dt);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.05);
+        update(dt, clock.elapsedTime);
+        renderer.render(scene, camera);
+    }
+
+    // ============================================================
+    // 10. 輸入
+    // ============================================================
+    function bindInput() {
+        $('btn-action').addEventListener('click', handleAction);
+        $('btn-cam').addEventListener('click', () => setCam(camIndex + 1));
+        document.querySelectorAll('.pitch-btn').forEach(b => b.addEventListener('click', () => selectPitch(b.dataset.pitch)));
+
+        const grid = $('aim-grid'); let dragging = false;
+        const setAim = e => {
+            if (G.state !== 'AIMING' && G.state !== 'METER_POWER') return;
+            const r = grid.getBoundingClientRect();
+            const fx = clamp((e.clientX - r.left) / r.width, -0.4, 1.4);
+            const fy = clamp((e.clientY - r.top) / r.height, -0.4, 1.4);
+            G.aim.x = (fx - 0.5) * ZONE.halfW * 2;
+            G.aim.y = ZONE.yMax - fy * (ZONE.yMax - ZONE.yMin);
+            updateAimCursor();
+        };
+        grid.addEventListener('pointerdown', e => { dragging = true; grid.setPointerCapture(e.pointerId); setAim(e); });
+        grid.addEventListener('pointermove', e => { if (dragging) setAim(e); });
+        grid.addEventListener('pointerup', () => dragging = false);
+        grid.addEventListener('pointercancel', () => dragging = false);
+
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) handleAction(); }
+            else if (e.key >= '1' && e.key <= '5') selectPitch(['4SFB', 'SL', 'CB', 'CH', 'FS'][+e.key - 1]);
+            else if (e.key === 'c' || e.key === 'C') setCam(camIndex + 1);
+        });
+    }
+
+    // ============================================================
+    // 啟動
+    // ============================================================
+    window.addEventListener('load', () => {
+        clock = new THREE.Clock();
+        init3D(); bindInput();
+        selectPitch('4SFB'); updateAimCursor(); newBatter(); updateHUD();
+        animate();
+    });
+    </script>
+</body>
+</html>
